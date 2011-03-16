@@ -391,6 +391,19 @@ SHOW GLOBAL STATUS LIKE 'Handler_%'
 
 \section{InnoDB Internals}
 
+\begin{frame}{InnoDB Background}
+  InnoDB is pretty old; first line of code written in early 1994, first released
+  with MySQL-3.23.34a in 2001.
+  \newline
+  \newline
+  It was primarily written by Heikki Tuuri and other Finns who wrote cryptic
+  English documentation.
+  \newline
+  \newline
+  A lot of people underestimate how amazingly fast and advanced InnoDB
+  is. There's black magic \emph{everywhere}.
+\end{frame}
+
 \begin{frame}{InnoDB Structure}
   InnoDB consists of several various substructures such as the buffer pool, log
   files, tablespace, etc.

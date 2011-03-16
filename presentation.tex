@@ -10,6 +10,21 @@
 \begin{frame}
   \titlepage
 \end{frame}
+
+\begin{frame}{A Huge Disclaimer}
+  We're not really MySQL experts.
+  \newline
+  \newline
+  This presentation probably contains gross inaccuracies, especially regarding
+  InnoDB internals.
+\end {frame}
+
+\begin{frame}{Outline}
+  \tableofcontents
+\end{frame}
+
+\section{The Basics}
+
 \begin{frame}{Introduction}
   A DBA walks into a bar, and sees two tables...
   \pause
@@ -53,17 +68,71 @@ COMMIT
 \begin{frame}{Transaction Isolation Levels}
   The SQL specification provides for four different \emph{transaction isolation
     levels}. These control how much isolation there is between two transactions.
-\end{frame}
-\begin{frame}{Transaction Isolation Levels}
-  In the previous example, a transaction isolation like \texttt{READ
-    UNCOMMITTED} would make it possible for a second transaction to see just one
-  of the inserts, but not the other.
   \newline
   \newline
-  A higher transaction isolation level like
-  \texttt{READ COMMITTED} would make it possible only to see rows that have been
-  fully committed.
+  In general you can choose where you want to be on a scale of low
+  isolation/overhead and high isolation/overhead. The SQL specification says
+  that an implementation must be at least as strict as the stated isolation
+  level (but could be more strict). MySQL implements all four, PostgreSQL and
+  Oracle just implement two.
 \end{frame}
+
+\begin{frame}{READ UNCOMMITTED}
+  The lowest isolation level is \texttt{READ UNCOMMITTED}; any change from any
+  transaction can be read in this transaction isolation level, even if the
+  change has not been committed. Don't ever use this.
+\end{frame}
+
+\begin{frame}{READ COMMITTED}
+  In \texttt{READ COMMITTED} you can read any change committed by any other
+  transaction. This has low overhead, and is frequently ``good enough''.
+  \newline
+  \newline
+  In practice this is the least strict isolation level implemented by most databases (e.g. PostgreSQL and Oracle).
+\end{frame}
+
+\begin{frame}{REPEATABLE READ}
+  In \texttt{REPEATABLE READ}, a consistent snapshot of the database is
+  available to the transaction. If you execute \texttt{SELECT * FROM user WHERE
+    ...}, that query will always return the same set of rows within the
+  transaction. Deletes, updates, and inserts by other transactions will not
+  affect what you read, even after those transactions have been comitted.
+  \newline
+  \newline
+  This is the default isolation level in MySQL, and the one primarily used by Yelp.
+\end{frame}
+
+\begin{frame}{REPEATABLE READ (continued)}
+  Note that in \texttt{REPEATABLE READ} MySQL must maintain a snapshot of what
+  the database looked like when the transaction began (this is called
+  MVCC, multi-version concurrency control).
+  \newline
+  \newline
+  As rows are inserted/updated/deleted, MySQL must maintain state to remember
+  what the snapshot should look like to each transaction executing in
+  \texttt{REPEATABLE READ}.
+\end{frame}
+
+\begin{frame}{REPEATABLE READ (continued)}
+  Even \texttt{SELECT} statements incur overhead in \texttt{REPEATABLE READ},
+  and can cause locking problems and database overhead.
+  \newline
+  \newline
+  You must \emph{never} leave a transaction open indefinitely after doing any
+  SQL query in \texttt{REPEATABLE READ}. Periodically \texttt{COMMIT} or
+  \texttt{ROLLBACK}, even when you're just doing selects.
+\end{frame}
+
+\begin{frame}{SERIALIZABLE}
+  In \texttt{SERIALIZABLE} the database must act as if only one transaction
+  occurred at a time, i.e. as if the database itself were single-threaded. Only
+  in a few corner cases is this different from \texttt{REPEATABLE READ}, and the
+  overhead is very high.
+  \newline
+  \newline
+  In practice if you need to use this, your code is broken. We can cover an example of where this could be different from \texttt{REPEATABLE READ} during Q\&A.
+\end{frame}
+
 
 \begin{frame}{MySQL Storage Engines}
   MySQL has the concept of a ``storage engine''. This is an implementation of
@@ -99,6 +168,8 @@ COMMIT
   In general InnoDB is more actively maintained than MyISAM, and is comparable
   or superior in speed.
 \end{frame}
+
+\section{Replication}
 
 \begin{frame}{MySQL Replication}
 

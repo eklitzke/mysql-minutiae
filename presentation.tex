@@ -335,7 +335,7 @@ COMMIT
   \frametitle{The InnoDB Buffer Pool}
   \begin{table}[ht]
     \begin{tabular}{l r@{.}l}
-      operation                   & nanoseconds \\ \hline \\
+      operation                   & nanoseconds \\ \hline
       L1 cache reference          & 0 & 5 \\
       L2 cache reference          & 7 & \\
       main memory (RAM) reference & 100 & \\
@@ -401,14 +401,89 @@ COMMIT
 
 \section{InnoDB Locking}
 
+\begin{frame}{InnoDB Locking}
+  There are three important types of locks in InnoDB. They are:
+  \begin{itemize}
+    \item Auto-increment locks
+    \item Table locks
+    \item Index locks
+  \end{itemize}
+  We will present them in this order, from least complext to most complex. Note
+  that some of these have sub-varieties of locks.
+\end{frame}
+
+\begin{frame}{Lock Acquisition Order}
+  Generally a single query will acquire locks in this order:
+  \begin{enumerate}
+    \item Table locks
+    \item Auto-increment locks (inserts only)
+    \item Index locks
+  \end{enumerate}
+\end{frame}
+
+\subsection{Auto-Increment Locks}
+
+\begin{frame}{Auto-Increment Locks}
+  Auto-increment locks are special and different from all other locks. They're
+  also the simplest, so we'll cover them first.
+\end{frame}
+
+\begin{frame}[fragile]
+  \frametitle{Auto-Increment Locks}
+  Commonly you'll see tables with a column defined like
+\begin{verbatim}
+id INTEGER PRIMARY KEY AUTO_INCREMENT
+\end{verbatim}
+  If any column on a table is declared as \texttt{AUTO\_INCREMENT}, the table
+  will have an auto-increment lock associated with it. There can be at most one
+  auto-increment column (and lock) per table.
+\end{frame}
+
+\begin{frame}{Auto-Increment Locks}
+  Auto-increment locks are acquired by statements, not transactions (unlike
+  every other lock).
+  \newline
+  \newline
+  The lock is held for the duration of a single \texttt{INSERT} statement and
+  then immediately released, even if there are multiple inserts in a single
+  transaction.
+\end{frame}
+
+\begin{frame}{Auto-Increment Locks}
+  Upon executing an \texttt{INSERT} into a table with an auto-increment lock,
+  the auto-increment lock is acquired after table locks and before index
+  locks.
+\end{frame}
+
+\begin{frame}{Auto-Increment Locks}
+  Note that the auto-increment value is increased even if a statement that
+  increases it isn't committed, so you can have ``gaps'' in a table even if
+  there were no deletions.
+  \newline
+  \newline
+  \pause
+  Likewise, the auto-increment values created by multiple inserts in a
+  transaction may not be contiguous.
+\end{frame}
+
+\begin{frame}{Auto-Increment Locks}
+  In passing, we note that MySQL 5.1 has improved the performance of
+  auto-increment locks (compared to 5.0), so this is something to look forward
+  to!
+\end{frame}
+
+\subsection{Lock Types}
+
 \begin{frame}{Lock Types}
-  In general there are two types of locks. There are \emph{shared locks},
-  a.k.a. read locks or S-locks.
+  Before diving into table and index locks, we have to discuss lock types. In
+  general there are two types of locks. There are \emph{shared locks},
+  a.k.a. ``read'' locks or S-locks.
   \newline
   \newline
-  There are also \emph{exclusive locks}, a.k.a. write locks or X-locks.
+  There are also \emph{exclusive locks}, a.k.a. ``write'' locks or X-locks.
   \newline
   \newline
+  \pause
   Be advised: we'll be using the notation S-lock and X-lock a lot.
 \end{frame}
 
@@ -437,69 +512,107 @@ COMMIT
   Just to reiterate: the general rule of thumb is that S-locks might be acquired
   by reads, and X-locks are always acquired by writes. S-locks are compatible
   with other S-locks, and X-locks are compatible with nothing.
-  \newline
-  \newline
-  There are some more exotic types like IS-locks and IX-locks that we'll get to
-  later, but those are less fundamental.
 \end{frame}
 
-\begin{frame}{Auto-Increment Locks}
-  Auto-increment locks are special and different from all other locks. They're
-  also the simplest, so we'll cover them first.
+\subsection{Table Locks}
+
+\begin{frame}{Table Locks}
+  Tables can be locked in InnoDB. When a table is locked with an S-lock no
+  inserts/updates/alters can occur, but reads can.
+  \newline
+  \newline
+  When a table is locked with an X-lock no other queries can read or write to
+  that table.
 \end{frame}
 
-\begin{frame}[fragile]
-  \frametitle{Auto-Increment Locks}
-  Commonly you'll see tables with a column defined like
-\begin{verbatim}
-id INTEGER PRIMARY KEY AUTO_INCREMENT
-\end{verbatim}
-  If any column on a table is declared as \texttt{AUTO\_INCREMENT}, the table
-  will have an auto-increment lock associated with it. There can be at most one
-  auto-increment column (and lock) per table.
+\begin{frame}{Table Locks}
+  The most common reason for an S-lock or X-lock to be acquired on a table is
+  because of an administrative command such as an \texttt{ALTER TABLE} or
+  \texttt{DROP TABLE}.
+  \newline
+  \newline
+  In ``normal'' usage you won't see these locks.
 \end{frame}
 
-\begin{frame}{Auto-Increment Locks}
-  Auto-increment locks are acquired by statements, not transactions (unlike
-  every other lock). The lock is held for the duration of a single statement.
+\begin{frame}{Intent Locks}
+  Tables also have special ``intent'' locks, IS-locks (``intent to acquire
+  S-lock'') and IX-locks (``intent to acquire X-lock'').
   \newline
   \newline
-  Upon executing an \texttt{INSERT} into a table with an auto-increment lock,
-  the auto-increment lock is the first lock that is acquired. In the InnoDB
-  status, you'll see this as an \texttt{A} lock.
+  Intent locks are always compatible with other intent locks (e.g. IX-lock is
+  compatible with IS-lock).
 \end{frame}
 
-\begin{frame}{Auto-Increment Locks}
-  Note that the auto-increment value is increased even if a statement that
-  increases it isn't committed, so you can have ``gaps'' in a table even if
-  there were no deletions.
+\begin{frame}{Intent Locks}
+  Here is a handy matrix showing lock compatibility ($\times$~means
+  incompatible):
+  \begin{table}[ht]
+    \begin{tabular}{r|c c c c}
+        & IS       & S        & IX       & X        \\ \hline
+     IS & $\cdot$  & $\cdot$  & $\cdot$  & $\times$ \\
+     S  & $\cdot$  & $\cdot$  & $\times$ & $\times$ \\
+     IX & $\cdot$  & $\times$ & $\cdot$  & $\times$ \\
+     X  & $\times$ & $\times$ & $\times$ & $\times$ \\
+    \end{tabular}
+  \end{table}
+\end{frame}
+
+\begin{frame}{Intent Locks}
+  Any query that's going to acquire an S-lock or X-lock on an index will acquire
+  an intent lock of the same type on the table first.
   \newline
   \newline
-  \pause
-  Likewise, the auto-increment values created by multiple inserts in a
-  transaction may not be contiguous.
+  This is so that queries
+  like \texttt{ALTER TABLE} are prevented from running while a \texttt{SELECT}
+  or \texttt{INSERT} is running on a table, even though those queries don't
+  actually lock the table.
+\end{frame}
+
+\subsection{Index Locks}
+
+\begin{frame}{Index Locks}
+  Take a deep breath, we're about to enter the magic and mysterious world of index locks.
   \newline
   \newline
-  \pause
-  Acquiring the lock in one statement in a transaction does not acquire it for
-  other statements in the same transaction.
+  These are by far the most complex, and arguably most important type of lock in InnoDB.
+\end{frame}
+
+\begin{frame}{Index Locks}
+  Also, remember to forget everything we just said about intent locks. Those are
+  for table locks only, not index locks.
+  \newline
+  \newline
+  Index locks come in just two types: S-locks and X-locks.
+\end{frame}
+
+\begin{frame}{Index Locks}
+  Index locks \emph{are} just of the kind S or X, but that's not the whole
+  story. There are three flavors of index lock:
+  \begin{itemize}
+    \item index record locks
+    \item next-key locks
+    \item gap locks
+  \end{itemize}
+  What all of these locks have in common is that they are held at a per-index
+  level granularity, and they lock all or part of an index.
 \end{frame}
 
 \begin{frame}{Index Record Locks}
-  The next most basic lock is the \emph{index record lock}. Some people may
+  The most basic index lock is the \emph{index record lock}. Some people may
   confuse row-level locks with these. In fact, InnoDB cannot truly lock rows, it
   instead locks these index records.
   \newline
   \newline
   When no indexes/keys are defined for a table, an implicit auto-increment lock
-  is created, and that index is used for locking records.
+  is created, and that index is used for locking records. Index record locks on
+  the PK effectively act as a row lock.
 \end{frame}
 
 \begin{frame}[fragile]
   \frametitle{Index Record Locks}
   Consider the query
 \begin{verbatim}
-DELETE FROM user WHERE id = 1;
+DELETE FROM user WHERE id = 1
 \end{verbatim}
   this query will lock the part of the index for the row whose \texttt{id} is
   1. The same goes for \texttt{UPDATE} statements, etc.

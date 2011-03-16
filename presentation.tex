@@ -145,17 +145,26 @@ COMMIT
   \texttt{ROLLBACK}, even when you're just doing selects.
 \end{frame}
 
+\begin{frame}{REPEATABLE READ (continued)}
+  This is so important it will be repeated. The official documentation says:
+  \newline
+  \newline
+  ``You must remember to commit your transactions regularly, including those
+  transactions that issue only consistent reads. Otherwise, InnoDB cannot
+  discard data from the update undo logs, and the rollback segment may grow too
+  big, filling up your tablespace.''
+\end{frame}
+
 \begin{frame}{SERIALIZABLE}
   In \texttt{SERIALIZABLE} the database must act as if only one transaction
-  occurred at a time, i.e. as if the database itself were single-threaded. Only
-  in a few corner cases is this different from \texttt{REPEATABLE READ}, and the
-  overhead is very high.
-  \pause
+  occurred at a time, i.e. as if the database itself were single-threaded. In
+  practice, this is implemented by causing all selects to automatically acquire
+  S-locks.
   \newline
   \newline
-  In practice if you need to use this, your code is broken. We can cover an
-  example of where this could be different from \texttt{REPEATABLE READ} during
-  Q\&A, but it's pretty esoteric and probably better if you don't know.
+  In you need to use this, your code is broken. It's better to acquire the locks
+  explicitly using \texttt{LOCK IN SHARE MODE} or \texttt{SELECT FOR UPDATE}.
+
 \end{frame}
 
 
@@ -723,6 +732,70 @@ DELETE FROM user WHERE id = 1
   not to create too many locks on a table.
 \end{frame}
 
+\section{Examples}
+
+\begin{frame}[fragile]
+  \frametitle{Copy Row Example}
+  The goal is to write a function \texttt{copy\_row(id\_src, id\_dst)} that
+  copies the values from the row \texttt{id\_src} to \texttt{id\_dst}. The
+  pseudo-code is like:
+\begin{verbatim}
+  BEGIN;
+  SELECT * FROM table WHERE id = id_src;
+  UPDATE table SET ... = ... WHERE id = id_dst;
+  COMMIT;
+\end{verbatim}
+  If there are two simultanous invocations like \texttt{copy\_row(1, 2)} and
+  \texttt{copy\_row(2, 1)}, then both rows should end up equal but not swapped.
+\end{frame}
+
+\begin{frame}{Copy Row Example}
+  Question is: what locks must be acquired to ensure that rows always end up
+  copied, and not swapped?
+  \newline
+  \newline
+  Which uses of \texttt{LOCK IN SHARE MODE} or
+  \texttt{SELECT FOR UPDATE}, or which isolation levels, are sufficient to
+  guarantee this?
+\end{frame}
+
+\begin{frame}{FOR UPDATE example 1}
+  $A$: \texttt{SELECT * FROM user WHERE id = 1 FOR UPDATE;}
+  \newline
+  \newline
+  $B$: \texttt{SELECT * FROM user WHERE id = 1;}
+  \newline
+  \newline
+  Will $B$ block on $A$'s X-lock?
+\end{frame}
+
+\begin{frame}{FOR UPDATE example 2}
+  $A$: \texttt{SELECT * FROM user WHERE id = 1 FOR UPDATE;}
+  \newline
+  \newline
+  $B$: \texttt{SELECT * FROM user WHERE id = 1 LOCK IN SHARE MODE;}
+  \newline
+  \newline
+  Will $B$ block on $A$'s X-lock?
+\end{frame}
+
+\begin{frame}{Insert Deadlock}
+  Users with ids 1, 3, 4, 7, 8 exist in the table at the start.
+  \newline
+  \newline
+  $A$: \texttt{DELETE FROM user WHERE id = 5;}
+  \newline
+  $B$: \texttt{DELETE FROM user WHERE id = 6;}
+  \newline
+  $A$: \texttt{INSERT INTO user (id) VALUES (5); }
+  \newline
+  $B$: \texttt{INSERT INTO user (id) VALUES (6); }
+  \newline
+  \newline
+  Why does this deadlock?
+  \newline
+  Bonus: is $A$ killed or $B$, and why?
+\end{frame}
 \begin{frame}{Conclusion}
   The source code and compiled PDF of these slides is available online at
   \newline

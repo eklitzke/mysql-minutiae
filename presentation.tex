@@ -4,6 +4,8 @@
 
 \title{MySQL Minutiae \& InnoDB Internals}
 \author{Evan Klitzke \and Daniel Chen}
+\institute{Yelp, Inc.}
+\date{March 18, 2011}
 
 \begin{document}
 
@@ -318,7 +320,8 @@ COMMIT
 \section{InnoDB Internals}
 
 \begin{frame}{InnoDB Structure}
-  stuff
+  InnoDB consists of several various substructures such as the buffer pool, log
+  files, tablespace, etc.
 \end{frame}
 
 \begin{frame}{The InnoDB Buffer Pool}
@@ -333,15 +336,17 @@ COMMIT
 
 \begin{frame}[fragile]
   \frametitle{The InnoDB Buffer Pool}
+  Assuming average memory and a normal HDD:
   \begin{table}[ht]
-    \begin{tabular}{l r@{.}l}
-      operation                   & nanoseconds \\ \hline
-      L1 cache reference          & 0 & 5 \\
-      L2 cache reference          & 7 & \\
-      main memory (RAM) reference & 100 & \\
-      read 1MB sequentially (RAM) & 250,000 & \\
-      disk seek                   & 10,000,000 & \\
-      read 1MB sequentially (disk) & 30,000,000 & \\
+    \begin{tabular}{l r}
+      operation                    & nanoseconds \\ \hline
+      L1 cache reference           & $<1$        \\
+      L2 cache reference           & 7           \\
+      main memory (RAM) reference  & 100         \\
+      flash (FusionIO) reference   & 50,000      \\
+      read 1MB sequentially (RAM)  & 250,000     \\
+      disk seek                    & 10,000,000  \\
+      read 1MB sequentially (disk) & 30,000,000  \\
     \end{tabular}
   \end{table}
 \end{frame}

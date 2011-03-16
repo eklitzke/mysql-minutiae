@@ -72,7 +72,7 @@
 \end{frame}
 
 \begin{frame}[fragile]
-  \frametitle{Database Transaction Example}
+  \frametitle{Database Transaction Example 1}
   Consider the following query
   \begin{verbatim}
 BEGIN
@@ -83,6 +83,31 @@ COMMIT
 
   The transaction ensures that either both inserts occur, or neither insert
   occurs. There's no way for just one of the rows to be inserted.
+\end{frame}
+
+\begin{frame}[fragile]
+  \frametitle{Database Transaction Example 2}
+  What is returned at (a), (b), and (c) in REPEATABLE READ?
+  \begin{verbatim}
+T1: BEGIN
+T2: BEGIN
+T3: BEGIN
+T1: INSERT INTO t VALUES (1)
+T2: SELECT * FROM t // (a)
+T1: COMMIT
+T2: SELECT * FROM t // (b)
+T3: SELECT * FROM t // (c)
+  \end{verbatim}
+\end{frame}
+
+\begin{frame}{Database Transaction Example 2}
+(a) Returns no rows
+\newline
+(b) Returns no rows
+\newline
+(c) Returns one row, [1]
+\newline
+Takeaway: Transactions actually begin when you issue your first query
 \end{frame}
 
 \begin{frame}{Transaction Isolation Levels}

@@ -443,6 +443,24 @@ SHOW GLOBAL STATUS LIKE 'Handler_%'
   files, tablespace, etc.
 \end{frame}
 
+\begin{frame}{InnoDB On-Disk Row Structure}
+  In general, data is stored inside of a row, instead of as a pointer (but very
+  large \texttt{TEXT} and \texttt{BLOB}, generally $>8000$ bytes, may be
+  different).
+  \newline
+  \newline
+  However, three fields are automatically added to each row...
+\end{frame}
+
+\begin{frame}{InnoDB On-Disk Row Structure}
+  The three automatically added fields are:
+  \begin{itemize}
+    \item \texttt{DB\_TRX\_ID} 6-bytes containing txn id
+    \item \texttt{DB\_ROLL\_PTR} 7-byte ``roll pointer'' pointing to undo log record
+    \item \texttt{DB\_ROW\_ID} 6-byte auto-increment value
+  \end{itemize}
+\end{frame}
+
 \begin{frame}{The InnoDB Buffer Pool}
   InnoDB keeps an LRU copy of table and index data in memory, in a special
   structure called the \emph{buffer pool}. When queries are executed, InnoDB
@@ -519,8 +537,8 @@ SHOW GLOBAL STATUS LIKE 'Handler_%'
   \pause
   \newline
   \newline
-  e.g. this txn has LSN 100, this row has LSN 120 and pointer to LSN 90, follow
-  the pointer.
+  e.g. this txn has LSN 100, this row has LSN 120 and \texttt{DB\_ROLL\_PTR} to
+  LSN 90 in, follow the pointer.
 \end{frame}
 
 \begin{frame}{InnoDB Tablespace}

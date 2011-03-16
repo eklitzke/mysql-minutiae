@@ -445,20 +445,24 @@ SHOW GLOBAL STATUS LIKE 'Handler_%'
 
 \begin{frame}{InnoDB On-Disk Row Structure}
   In general, data is stored inside of a row, instead of as a pointer (but very
-  large \texttt{TEXT} and \texttt{BLOB}, generally $>8000$ bytes, may be
+  large \texttt{TEXT} and \texttt{BLOB} columns, generally $>8000$ bytes, may be
   different).
   \newline
   \newline
-  However, three fields are automatically added to each row...
+  Up to 50\% space may be wasted due to alignment issues in the most
+  pathological cases, but generally InnoDB is conservative about using space.
 \end{frame}
 
 \begin{frame}{InnoDB On-Disk Row Structure}
-  The three automatically added fields are:
-  \begin{itemize}
-    \item \texttt{DB\_TRX\_ID} 6-bytes containing txn id
-    \item \texttt{DB\_ROLL\_PTR} 7-byte ``roll pointer'' pointing to undo log record
-    \item \texttt{DB\_ROW\_ID} 6-byte auto-increment value
-  \end{itemize}
+  Three fields are automatically added to all rows:
+  \begin{table}[ht]
+    \begin{tabular}{l l l}
+      field                  & bytes & purpose \\ \hline
+      \texttt{DB\_TRX\_ID}   & 6     & transaction id \\
+      \texttt{DB\_ROLL\_PTR} & 7     & ``roll pointer'' to undo log records \\
+      \texttt{DB\_ROW\_ID}   & 6     & auto-increment value
+    \end{tabular}
+  \end{table}
 \end{frame}
 
 \begin{frame}{The InnoDB Buffer Pool}

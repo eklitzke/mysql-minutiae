@@ -1,0 +1,196 @@
+\documentclass[14pt]{beamer}
+\usepackage{listings}
+\usetheme{CambridgeUS}
+
+\title{MySQL Minutiae \& InnoDB Internals}
+\author{Evan Klitzke \and Daniel Chen}
+
+\begin{document}
+
+\begin{frame}
+  \titlepage
+\end{frame}
+\begin{frame}{Introduction}
+  A DBA walks into a bar, and sees two tables...
+  \pause
+  he walks up to them and asks, ``May I join you?''
+\end {frame}
+
+\begin{frame}{Databases}
+  Things a relational database does:
+  \begin{itemize}
+    \item stores data
+    \item provides convenient query facilities (i.e. SQL)
+    \item hopefully: provides transaction support (and transaction isolation)
+    \item maybe: replication facilities
+  \end{itemize}
+  MySQL with the InnoDB storage engine does all of these.
+\end{frame}
+
+\begin{frame}{Database Transactions}
+  Database transactions are an \emph{extremely} important concept, and will be
+  pivotal to our discussion.
+  \pause
+  \newline
+  \newline
+  A \emph{database transaction} provides the capability for connections to atomically execute groups of statements.
+\end{frame}
+
+\begin{frame}[fragile]
+  \frametitle{Database Transaction Example}
+  Consider the following query
+  \begin{verbatim}
+BEGIN
+INSERT INTO users (...)
+INSERT INTO users (...)
+COMMIT
+  \end{verbatim}
+
+  The transaction ensures that either both inserts occur, or neither insert
+  occurs. There's no way for just one of the rows to be inserted.
+\end{frame}
+
+\begin{frame}{Transaction Isolation Levels}
+  The SQL specification provides for four different \emph{transaction isolation
+    levels}. These control how much isolation there is between two transactions.
+\end{frame}
+\begin{frame}{Transaction Isolation Levels}
+  In the previous example, a transaction isolation like \texttt{READ
+    UNCOMMITTED} would make it possible for a second transaction to see just one
+  of the inserts, but not the other.
+  \newline
+  \newline
+  A higher transaction isolation level like
+  \texttt{READ COMMITTED} would make it possible only to see rows that have been
+  fully committed.
+\end{frame}
+
+\begin{frame}{MySQL Storage Engines}
+  MySQL has the concept of a ``storage engine''. This is an implementation of
+  facilities for storing data and dealing with things like database transactions
+  and locking.
+  \newline
+  \newline
+  The most commonly used storage engines are MyISAM and InnoDB.
+\end{frame}
+
+\begin{frame}{MySQL Storage Engines}
+  To better elucidate the diferences, MySQL itself does the following:
+  \begin{itemize}
+    \item parses incoming SQL statements, and does some of the query optimization
+    \item handles replication
+  \end{itemize}
+  The storage engine
+  \begin{itemize}
+    \item implements on-disk storage, and caching
+    \item implements transactions and transaction isolation
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{MySQL Storage Engines}
+  At Yelp, we
+  almost exclusively use the InnoDB storage engine. Compared to MyISAM, InnoDB provides:
+  \begin{itemize}
+    \item row-level locking, instead of table-level locking
+    \item replication safety
+    \item better crash recovery
+  \end{itemize}
+
+  In general InnoDB is more actively maintained than MyISAM, and is comparable
+  or superior in speed.
+\end{frame}
+
+\begin{frame}{MySQL Replication}
+
+  MySQL has this great feature called \emph{replication}.
+  \newline
+  \newline
+  When replication is
+  enabled database inserts, updates, and deletes can be propagated from a \emph{master} database
+  instance to one or more \emph{slaves}.
+\end{frame}
+
+\begin{frame}{MySQL Replication}
+  Typically that queries that modify data---statements like \texttt{INSERT},
+  \texttt{UPDATE}, \texttt{DELETE}---should only be run on the master
+  database. Running these statements on a slave will cause it to get out of sync
+  with the master, which is \emph{usually} unintentional.
+  \newline
+  \newline
+  Queries that just read data (i.e. \texttt{SELECT} statements) can be run on any database, master or slave.
+\end{frame}
+
+\begin{frame}{Uses of MySQL Replication}
+  What is replication good for?
+\end{frame}
+
+\begin{frame}{Uses of MySQL Replication}
+  Replication helps increase reliability. Your data is stored in more than one
+  place, so if the master MySQL instance fails, the data exists on one or more slaves.
+  \newline
+  \newline
+  In the event of a failure, you could choose to promote a slave to become a
+  master, reducing site downtime.
+\end{frame}
+
+\begin{frame}{Uses of MySQL Replication}
+
+  Replication makes it easy to scale out read capacity.
+  \newline
+  \newline
+  \texttt{SELECT}
+  statements can be run against slave databases. As traffic grows you can
+  purchase more servers to use as slaves, instead of having to purchase a huge
+  mainframe database to handle all traffic.
+
+\end{frame}
+
+\begin{frame}{Uses of MySQL Replication}
+  Replication can assist in data recovery, and testing out changes. It's
+  possible to test things like \texttt{ALTER} statements on a slave without
+  affecting the master. Strategies like delayed replication can be used to help
+  prevent certain types of data corruption.
+\end{frame}
+
+\begin{frame}{MySQL Binlogs}
+  MySQL serializes transactions that modify data into a special log called the
+  \emph{binlog}, short for ``binary log''.
+  \newline
+  \newline
+  SQL statements in the binlog are replayed one at a time on the slave
+  databases, causing them to make the same modifications that the master made.
+\end{frame}
+
+\begin{frame}{Replication Caveats}
+  The most common replication strategy used in MySQL, and the only option in
+  MySQL 5.0, is \emph{statement-based replication}. This means SQL statements
+  are copied verbatim into the binlog, and re-run on the slaves.
+  \newline
+  \newline
+  An update statement with a where clause might execute slowly (e.g. minutes),
+  and end up modifying just a single row. This statement will take just as long
+  to run on the slaves.
+\end{frame}
+
+\begin{frame}{Replication Caveats}
+  In passing, we note that MySQL 5.1 and later supports \emph{row-based
+    replication}, which copies that actual changes made by the master into the
+  binlog, rather than SQL queries.
+  \newline
+  \newline
+  In general row-based replication is still not that mature, and has a lot of
+  corner cases. We don't use it, and it's disabled in MySQL by default.
+\end{frame}
+
+\begin{frame}{Replication Caveats}
+  When a slave replays statements in the binlog, it replays the statements one
+  at a time (i.e. from a single thread). In contrast, the master database can
+  run statements concurrently in multiple threads.
+  \newline
+  \newline
+  Because the binlog is implicitly single threaded, it's easy for slaves to fall
+  behind in processing binlog statements, even though they have the same
+  hardware as the master, and the master is easily able to keep up.
+\end{frame}
+
+\end{document}

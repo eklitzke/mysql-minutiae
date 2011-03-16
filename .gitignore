@@ -1,0 +1,11 @@
+*~
+*.sw[nop]
+*.aux
+*.log
+*.nav
+*.out
+*.pdf
+*.ps
+*.snm
+*.toc
+*.vrb

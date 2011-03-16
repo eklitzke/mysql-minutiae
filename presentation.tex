@@ -337,6 +337,16 @@ COMMIT
   half of them are one-liners``.
 \end{frame}
 
+\begin{frame}[fragile]
+  \frametitle{Handler Variables}
+  For a good time, run the following MySQL query:
+\begin{verbatim}
+SHOW GLOBAL STATUS LIKE 'Handler_%'
+\end{verbatim}
+  You'll see about fifteen handler-related global variables about total number
+  of rows read, deleted, updated, etc.
+\end{frame}
+
 \begin{frame}{HandlerSocket}
   HandlerSocket is a project, implemented as a MySQL plugin, that takes
   advantage of the handler API to provide fast low-level access to MySQL storage

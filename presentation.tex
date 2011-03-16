@@ -1,5 +1,5 @@
 \documentclass[14pt]{beamer}
-\usepackage{listings}
+\usepackage{hyperref}
 \usetheme{CambridgeUS}
 
 \title{MySQL Minutiae \& InnoDB Internals}
@@ -12,11 +12,16 @@
 \end{frame}
 
 \begin{frame}{A Huge Disclaimer}
-  We're not really MySQL experts.
+  We're not really MySQL or InnoDB experts.
   \newline
   \newline
   This presentation probably contains gross inaccuracies, especially regarding
   InnoDB internals.
+  \newline
+  \newline
+  We're going to try to go really fast so try to save questions for the end,
+  unless we're being totally incoherent or you think we're making an egregious
+  error.
 \end {frame}
 
 \begin{frame}{Outline}
@@ -28,7 +33,20 @@
 \begin{frame}{Introduction}
   A DBA walks into a bar, and sees two tables...
   \pause
+  \newline
   he walks up to them and asks, ``May I join you?''
+\end {frame}
+
+\begin{frame}{Introduction}
+  Today we'll be covering the MySQL relational database at a high-level, and
+  diving more deeply into a particular storage engine of MySQL, the InnoDB
+  storage engine.
+  \newline
+  \newline
+  A bit of context: mostly at Yelp we're on MySQL 5.0 (5.1 is coming \emph{real
+    soon}), and we're almost exclusively using InnoDB as our storage
+  engine. Almost all data that's rendered on any page load on our site comes out
+  of MySQL.
 \end {frame}
 
 \begin{frame}{Databases}
@@ -71,16 +89,17 @@ COMMIT
   \newline
   \newline
   In general you can choose where you want to be on a scale of low
-  isolation/overhead and high isolation/overhead. The SQL specification says
-  that an implementation must be at least as strict as the stated isolation
-  level (but could be more strict). MySQL implements all four, PostgreSQL and
-  Oracle just implement two.
+  isolation/overhead and high isolation/overhead. The isolation level you're in
+  has important ramifications when it comes to locking, as we'll see later.
 \end{frame}
 
 \begin{frame}{READ UNCOMMITTED}
   The lowest isolation level is \texttt{READ UNCOMMITTED}; any change from any
   transaction can be read in this transaction isolation level, even if the
-  change has not been committed. Don't ever use this.
+  change has not been committed.
+  \newline
+  \newline
+  Don't ever use this.
 \end{frame}
 
 \begin{frame}{READ COMMITTED}
@@ -88,7 +107,8 @@ COMMIT
   transaction. This has low overhead, and is frequently ``good enough''.
   \newline
   \newline
-  In practice this is the least strict isolation level implemented by most databases (e.g. PostgreSQL and Oracle).
+  In practice this is the least strict isolation level implemented by most
+  databases (e.g. PostgreSQL and Oracle).
 \end{frame}
 
 \begin{frame}{REPEATABLE READ}
@@ -128,9 +148,12 @@ COMMIT
   occurred at a time, i.e. as if the database itself were single-threaded. Only
   in a few corner cases is this different from \texttt{REPEATABLE READ}, and the
   overhead is very high.
+  \pause
   \newline
   \newline
-  In practice if you need to use this, your code is broken. We can cover an example of where this could be different from \texttt{REPEATABLE READ} during Q\&A.
+  In practice if you need to use this, your code is broken. We can cover an
+  example of where this could be different from \texttt{REPEATABLE READ} during
+  Q\&A, but it's pretty esoteric and probably better if you don't know.
 \end{frame}
 
 
@@ -140,7 +163,9 @@ COMMIT
   and locking.
   \newline
   \newline
-  The most commonly used storage engines are MyISAM and InnoDB.
+  The most commonly used storage engines are MyISAM and InnoDB. The storage
+  engine is set on a per-table level, so any given table can use any storage
+  engine.
 \end{frame}
 
 \begin{frame}{MySQL Storage Engines}
@@ -160,13 +185,12 @@ COMMIT
   At Yelp, we
   almost exclusively use the InnoDB storage engine. Compared to MyISAM, InnoDB provides:
   \begin{itemize}
-    \item row-level locking, instead of table-level locking
+    \item ``row-level'' locking, instead of table-level locking
     \item replication safety
     \item better crash recovery
   \end{itemize}
-
-  In general InnoDB is more actively maintained than MyISAM, and is comparable
-  or superior in speed.
+  In general InnoDB is more actively maintained than MyISAM, and is usually
+  comparable or superior in speed.
 \end{frame}
 
 \section{Replication}
@@ -219,7 +243,10 @@ COMMIT
 \begin{frame}{Uses of MySQL Replication}
   Replication can assist in data recovery, and testing out changes. It's
   possible to test things like \texttt{ALTER} statements on a slave without
-  affecting the master. Strategies like delayed replication can be used to help
+  affecting the master.
+  \newline
+  \newline
+  Strategies like delayed replication can be used to help
   prevent certain types of data corruption.
 \end{frame}
 
@@ -257,11 +284,239 @@ COMMIT
   When a slave replays statements in the binlog, it replays the statements one
   at a time (i.e. from a single thread). In contrast, the master database can
   run statements concurrently in multiple threads.
-  \newline
-  \newline
+\end{frame}
+
+\begin{frame}{Replication Caveats}
   Because the binlog is implicitly single threaded, it's easy for slaves to fall
   behind in processing binlog statements, even though they have the same
   hardware as the master, and the master is easily able to keep up.
+  \newline
+  \newline
+  This is very important: just because the master database can keep up with your
+  queries does not mean that the slaves will.
+\end{frame}
+
+\begin{frame}{Replication Delay}
+  When slaves cannot replay replication statements as quickly as the master,
+  their copy of the data falls behind and gets out of date.
+  \newline
+  \newline
+  A query on the master might return different data than the same query on a
+  slave, since the slave as an old copy of the data.
+\end{frame}
+
+\begin{frame}{Replication Delay}
+  In the Yelp code there are tricks like cacheserv and the ``dirty session''
+  cookie that generally make it impossible to observe replication delay under
+  normal circumstances, even if the slaves are moderately (e.g. $\le 2$ minutes)
+  delayed.
+  \newline
+  \newline
+  But you should still be careful!
+\end{frame}
+
+\section{InnoDB Internals}
+
+\begin{frame}{InnoDB Structure}
+  stuff
+\end{frame}
+
+\begin{frame}{The InnoDB Buffer Pool}
+  InnoDB keeps an LRU copy of table and index data in memory, in a special
+  structure called the \emph{buffer pool}. When queries are executed, InnoDB
+  will try to fulfil as much of the query as possible by consulting the buffer
+  pool, instead of seeking to disk.
+  \newline
+  \newline
+  Memory is \emph{much} faster than disk.
+\end{frame}
+
+\begin{frame}[fragile]
+  \frametitle{The InnoDB Buffer Pool}
+  \begin{table}[ht]
+    \begin{tabular}{l r@{.}l}
+      operation                   & nanoseconds \\ \hline \\
+      L1 cache reference          & 0 & 5 \\
+      L2 cache reference          & 7 & \\
+      main memory (RAM) reference & 100 & \\
+      read 1MB sequentially (RAM) & 250,000 & \\
+      disk seek                   & 10,000,000 & \\
+      read 1MB sequentially (disk) & 30,000,000 & \\
+    \end{tabular}
+  \end{table}
+\end{frame}
+
+\begin{frame}{The InnoDB Buffer Pool}
+  Note that InnoDB does \emph{not} try to make use of the kernel page cache
+  (i.e. the Linux ``disk cache''). InnoDB can structure data more efficiently
+  itself, allocate optimally sized pages, \texttt{mlock(2)}/\texttt{madvise(2)}
+  the memory, etc.
+  \newline
+  \newline
+  Typically InnoDB operates using \texttt{O\_DIRECT}, meaning that all access to
+  InnoDB data files completely bypasses the Linux VFS page cache.
+\end{frame}
+
+\begin{frame}{InnoDB Log Files}
+  To ensure that data corruption errors are recoverable in the case of a crash,
+  InnoDB uses a standard two-phase commit system, updating a log file before
+  updating the actual tablespace.
+  \newline
+  \newline
+  This is basically the same as how journalling filesystems like ext4 and HFS+ work.
+\end{frame}
+
+\begin{frame}{InnoDB LSN}
+  All queries update a globally incrementing log sequence number, the LSN. The
+  ``current'' LSN is stored alongside row data, to provide row versioning.
+  \newline
+  \newline
+  There's also a pointer to the previous copy of each row, which is used in
+  InnoDB's MVCC implementation.
+\end{frame}
+
+\begin{frame}{InnoDB LSN}
+  MySQL can safely purge any old rows that have been deleted/updated if their
+  LSN is lower than the lowest LSN of any open transaction.
+  \newline
+  \newline
+  If you forget to commit/rollback after a read, the minimum LSN won't decrease,
+  and old rows can't be reclaimed.
+\end{frame}
+
+\begin{frame}{InnoDB LSN}
+  MySQL can use a transaction's LSN to figure out if it's OK for a row's data to
+  be seen by a transaction, or if it must find an older version of the
+  row.
+  \pause
+  \newline
+  \newline
+  e.g. this txn has LSN 100, and this row has LSN 120, ignore this row.
+  \pause
+  \newline
+  \newline
+  e.g. this txn has LSN 100, this row has LSN 120 and pointer to LSN 90, follow
+  the pointer.
+\end{frame}
+
+\section{InnoDB Locking}
+
+\begin{frame}{Lock Types}
+  In general there are two types of locks. There are \emph{shared locks},
+  a.k.a. read locks or S-locks.
+  \newline
+  \newline
+  There are also \emph{exclusive locks}, a.k.a. write locks or X-locks.
+  \newline
+  \newline
+  Be advised: we'll be using the notation S-lock and X-lock a lot.
+\end{frame}
+
+\begin{frame}{Lock Types (S-locks)}
+  S-locks are generally used when values are read, and prevent other
+  transactions from modifying the data. Multiple transactions can have S-locks
+  on the same data simultaneously.
+  \newline
+  \newline
+  S-locks are weaker than X-locks, and may sometimes be upgraded to
+  an exclusive lock later on.
+\end{frame}
+
+\begin{frame}{Lock Types (X-locks)}
+  X-locks are stronger than S-locks, and are incompatible with other locks. If
+  transaction $A$ holds an X-lock on some data, no other transaction can hold an
+  S-lock \emph{or} an X-lock on that data at the same time; the other
+  transactions must wait until $A$ releases the lock.
+  \newline
+  \newline
+  If other transactions already hold S-locks or X-locks, then $A$ must wait
+  until those transactions release their lock before it can acquire the X-lock.
+\end{frame}
+
+\begin{frame}{Lock Types}
+  Just to reiterate: the general rule of thumb is that S-locks might be acquired
+  by reads, and X-locks are always acquired by writes. S-locks are compatible
+  with other S-locks, and X-locks are compatible with nothing.
+  \newline
+  \newline
+  There are some more exotic types like IS-locks and IX-locks that we'll get to
+  later, but those are less fundamental.
+\end{frame}
+
+\begin{frame}{Auto-Increment Locks}
+  Auto-increment locks are special and different from all other locks. They're
+  also the simplest, so we'll cover them first.
+\end{frame}
+
+\begin{frame}[fragile]
+  \frametitle{Auto-Increment Locks}
+  Commonly you'll see tables with a column defined like
+\begin{verbatim}
+id INTEGER PRIMARY KEY AUTO_INCREMENT
+\end{verbatim}
+  If any column on a table is declared as \texttt{AUTO\_INCREMENT}, the table
+  will have an auto-increment lock associated with it. There can be at most one
+  auto-increment column (and lock) per table.
+\end{frame}
+
+\begin{frame}{Auto-Increment Locks}
+  Auto-increment locks are acquired by statements, not transactions (unlike
+  every other lock). The lock is held for the duration of a single statement.
+  \newline
+  \newline
+  Upon executing an \texttt{INSERT} into a table with an auto-increment lock,
+  the auto-increment lock is the first lock that is acquired. In the InnoDB
+  status, you'll see this as an \texttt{A} lock.
+\end{frame}
+
+\begin{frame}{Auto-Increment Locks}
+  Note that the auto-increment value is increased even if a statement that
+  increases it isn't committed, so you can have ``gaps'' in a table even if
+  there were no deletions.
+  \newline
+  \newline
+  \pause
+  Likewise, the auto-increment values created by multiple inserts in a
+  transaction may not be contiguous.
+  \newline
+  \newline
+  \pause
+  Acquiring the lock in one statement in a transaction does not acquire it for
+  other statements in the same transaction.
+\end{frame}
+
+\begin{frame}{Index Record Locks}
+  The next most basic lock is the \emph{index record lock}. Some people may
+  confuse row-level locks with these. In fact, InnoDB cannot truly lock rows, it
+  instead locks these index records.
+  \newline
+  \newline
+  When no indexes/keys are defined for a table, an implicit auto-increment lock
+  is created, and that index is used for locking records.
+\end{frame}
+
+\begin{frame}[fragile]
+  \frametitle{Index Record Locks}
+  Consider the query
+\begin{verbatim}
+DELETE FROM user WHERE id = 1;
+\end{verbatim}
+  this query will lock the part of the index for the row whose \texttt{id} is
+  1. The same goes for \texttt{UPDATE} statements, etc.
+  \newline
+  \newline
+  An index record lock is acquired for all indexes associated with the table
+  (with the potential to deadlock, lock wait timeout, etc.). This is one reason
+  not to create too many locks on a table.
+\end{frame}
+
+\begin{frame}{Conclusion}
+  The source code and compiled PDF of these slides is available online at
+  \newline
+  \url{https://github.com/eklitzke/mysql-minutiae}
+  \newline
+  \newline
+  Feel free to share them with your friends, etc.
 \end{frame}
 
 \end{document}

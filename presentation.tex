@@ -317,6 +317,68 @@ COMMIT
   But you should still be careful!
 \end{frame}
 
+\section{HandlerSocket}
+
+\begin{frame}{Handler API}
+  The Handler API is the API you implement if you want to write your own MySQL
+  storage engine. You can implement it at two levels, a ``simple'' version for
+  an ultra-minimal ISAM like storage engine, or an ``advanced'' version for
+  something like InnoDB that supports transactions, two-phase commit, etc.
+  \newline
+  \newline
+  \pause
+  You'll see reference to Handler in storage engine names such as
+  \texttt{ha\_innodb}, \texttt{ha\_ndbcluster}, etc.
+\end{frame}
+
+\begin{frame}{Handler API}
+  According to cryptic MySQL slides on the internet, you only need to implement
+  ``about 10'' functions to implement the simplest level of compliance, ``and
+  half of them are one-liners``.
+\end{frame}
+
+\begin{frame}{HandlerSocket}
+  HandlerSocket is a project, implemented as a MySQL plugin, that takes
+  advantage of the handler API to provide fast low-level access to MySQL storage
+  engines.
+\end{frame}
+
+\begin{frame}{HandlerSocket}
+  HandlerSocket creates a new thread inside of MySQL, which creates a TCP socket
+  bound to some port.
+  \newline
+  \newline
+  You connect to the socket and interact with the HandlerSocket plugin using a
+  compact binary network protocol.
+\end{frame}
+
+\begin{frame}{HandlerSocket}
+  The HandlerSocket API exposes the basic Handler API functions for
+  reading/writing rows, doing updates, etc.
+  \newline
+  \newline
+  Basically you can do very simple CRUD (create-read-update-delete) operations
+  without the overhead of SQL parsing.
+\end{frame}
+
+\begin{frame}{HandlerSocket}
+  Another way to think of it: HandlerSocket lets you use an engine like InnoDB
+  without all of the overhead and complexity of the rest of MySQL.
+\end{frame}
+
+\begin{frame}{HandlerSocket Benchmark}
+  These are the results of Yoshinori Matsunobu's benchmarks, using the InnoDB
+  plugin version 1.0 (i.e. \texttt{ha\_innodb\_plugin.so} for MySQL 5.1):
+  \begin{table}[ht]
+    \begin{tabular}{l l l l}
+                              & QPS     & \%us & \%sy \\ \hline
+      MySQL via SQL           & 105,000 & 60   & 28   \\
+      memcached               & 420,000 & 8    & 88   \\
+      MySQL via HandlerSocket & 750,000 & 45   & 53   \\
+    \end{tabular}
+  \end{table}
+\end{frame}
+
 \section{InnoDB Internals}
 
 \begin{frame}{InnoDB Structure}

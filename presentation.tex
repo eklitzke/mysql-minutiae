@@ -414,15 +414,24 @@ SHOW GLOBAL STATUS LIKE 'Handler_%'
   These are the results of Yoshinori Matsunobu's benchmarks, using the InnoDB
   plugin version 1.0 (i.e. \texttt{ha\_innodb\_plugin.so} for MySQL 5.1):
   \begin{table}[ht]
-    \begin{tabular}{l l l l}
+    \begin{tabular}{l l r r}
                               & QPS     & \%us & \%sy \\ \hline
       MySQL via SQL           & 105,000 & 60   & 28   \\
       memcached               & 420,000 & 8    & 88   \\
       MySQL via HandlerSocket & 750,000 & 45   & 53   \\
     \end{tabular}
   \end{table}
+  Eskil notes that in his tests, memcached was faster than HandlerSocket.
 \end{frame}
 
+\begin{frame}{HandlerSocket Benchmark}
+  Eskil's benchmark:
+  \begin{tabular}{l r@{.}l}
+    \multicolumn{2}{c}{1k Inserts} \\ \hline
+    memcached     & 0 & 25s \\
+    HandlerSocket & 1 & 25s \\
+  \end{tabular}
+\end{frame}
 \section{InnoDB Internals}
 
 \begin{frame}{InnoDB Background}
@@ -782,6 +791,17 @@ DELETE FROM user WHERE id = 1
 \section{Examples}
 
 \begin{frame}[fragile]
+  \frametitle{Next-Key Locking}
+\begin{verbatim}
+CREATE TABLE dchen (i INT PRIMARY KEY);
+INSERT INTO dchen (i) VALUES (10), (20), (30);
+BEGIN;
+SELECT * FROM dchen WHERE i > 15;
+\end{verbatim}
+  How many locks does the transaction hold, and what are they?
+\end{frame}
+
+\begin{frame}[fragile]
   \frametitle{Copy Row Example}
   The goal is to write a function \texttt{copy\_row(id\_src, id\_dst)} that
   copies the values from the row \texttt{id\_src} to \texttt{id\_dst}. The
@@ -805,6 +825,21 @@ DELETE FROM user WHERE id = 1
   \texttt{SELECT FOR UPDATE}, or which isolation levels, are sufficient to
   guarantee this?
 \end{frame}
+
+\begin{frame}{LOCK IN SHARE MODE Example}
+  Table \texttt{stupid} has one column \texttt{id INT PRIMARY KEY} and one row
+  whose value is 10.
+  \newline
+  \newline
+  $A$: \texttt{SELECT * FROM stupid WHERE id > 5 LOCK IN SHARE MODE;}
+  \newline
+  \newline
+  $B$: \texttt{INSERT INTO stupid (id) VALUES (1);}
+  \newline
+  \newline
+  What happens?
+\end{frame}
+
 
 \begin{frame}{FOR UPDATE example 1}
   $A$: \texttt{SELECT * FROM user WHERE id = 1 FOR UPDATE;}
@@ -849,7 +884,9 @@ DELETE FROM user WHERE id = 1
   \url{https://github.com/eklitzke/mysql-minutiae}
   \newline
   \newline
-  Feel free to share them with your friends, etc.
+  See also my Percona Live notes at
+  \newline
+  \url{https://gist.github.com/830703}
 \end{frame}
 
 \end{document}

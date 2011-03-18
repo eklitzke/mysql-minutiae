@@ -616,32 +616,176 @@ SHOW GLOBAL STATUS LIKE 'Handler_%'
 \end{frame}
 
 \section{InnoDB Locking}
-
-\begin{frame}{InnoDB Locking}
-  There are three important types of locks in InnoDB. They are:
-  \begin{itemize}
-    \item Auto-increment locks
-    \item Table locks
-    \item Index locks
-  \end{itemize}
-  We will present them in this order, from least complext to most complex. Note
-  that some of these have sub-varieties of locks.
+\begin{frame}{Locking Basics}
+  InnoDB locks at the row level, not at the table level. In general, InnoDB does
+  nonlocking consistent reads. As a result, InnoDB allows for complex locking
+  semantics as well as good performance.
 \end{frame}
 
-\begin{frame}{Lock Acquisition Order}
-  Generally a single query will acquire locks in this order:
-  \begin{enumerate}
-    \item Table locks
-    \item Auto-increment locks (inserts only)
-    \item Index locks
-  \end{enumerate}
+\begin{frame}{InnoDB Locking}
+  Types of locks:
+  \begin{itemize}
+    \item Shared and Exclusive Locks
+    \item Auto-increment locks
+    \item Gap Locks
+  \end{itemize}
+\end{frame}
+
+\subsection{Shared and Exclusive Locks}
+
+\begin{frame}{Shared and Exclusive Locking}
+  In general there are two types of locks. There are \emph{shared locks}, a.k.a.
+  ``read'' locks or S-locks.
+  \newline
+  \newline
+  There are also \emph{exclusive locks}, a.k.a. ``write'' locks or X-locks.
+  \newline
+  \newline
+  \pause
+  Be advised: we'll be using the notation S-lock and X-lock a lot.
+\end{frame}
+
+\begin{frame}{Shared Locks}
+  S-locks are generally used when values are read, and prevent other
+  transactions from modifying the data. Multiple transactions can have S-locks
+  on the same data simultaneously.
+  \newline
+  \newline
+  S-locks are weaker than X-locks, and may sometimes be upgraded to
+  an exclusive lock later on.
+\end{frame}
+
+\begin{frame}{Example: Referential Integrity}
+  Suppose we have two tables, \texttt{container (id, type, full)}, and
+  \texttt{contents (id, container\_id, contents)}. We want to put cookies in a
+  cookie box, but only if a cookie box exists.
+\end{frame}
+
+\begin{frame}[fragile]
+  \frametitle{Example: Referential Integrity}
+  \begingroup
+    \fontsize {10pt}{12pt}\selectfont
+    \begin{verbatim}
+SELECT * FROM container WHERE type = 'cookiebox' 
+LOCK IN SHARE MODE;
+
+// Check to see if we got a 'cookiebox' back, and 
+// make sure it's not full.
+// Let's assume we got back  an empty container 
+// with id 5
+
+INSERT INTO contents (container_id, contents) 
+VALUES (5, 'cookies');
+    \end{verbatim}
+  \endgroup 
+\end{frame}
+
+\begin{frame}{Example: Referential Integrity}
+  Using a share lock ensures that nobody deletes our container before we put
+  cookies in it. Furthermore, if another transaction was altering whether our
+  container was full and we happened to see it when locked in share mode, we
+  would block on putting cookies into it until that transaction completed.
+\end{frame}
+
+\begin{frame}{Exclusive Locks}
+  X-locks are stronger than S-locks, and are incompatible with other locks. If
+  transaction $A$ holds an X-lock on some data, no other transaction can hold an
+  S-lock \emph{or} an X-lock on that data at the same time; the other
+  transactions must wait until $A$ releases the lock.
+  \newline
+  \newline
+  If other transactions already hold S-locks or X-locks, then $A$ must wait
+  until those transactions release their lock before it can acquire the X-lock.
+\end{frame}
+
+\begin{frame}{Example: Sales}
+  Suppose we have a table of sales counters \texttt{counter (id, sales\_count)}.
+  We want to transactionally increment the counter after a sale occurs.
+\end{frame}
+
+\begin{frame}[fragile]
+  \frametitle{Example: Sales}
+  \begingroup
+    \fontsize {10pt}{12pt}\selectfont
+    \begin{verbatim}
+// Prevent others from updating our counter
+SELECT * FROM counter WHERE id = 10 FOR UPDATE;
+
+// Makin the cash
+INSERT INTO sales (cash) VALUES (1000000000);
+
+// Update the number of sales after we makes the cash
+UPDATE counter SET sales_count = sales_count + 1
+WHERE id = 10;
+    \end{verbatim}
+  \endgroup
+\end{frame}
+
+\begin{frame}{Example: Sales}
+  If we used a share lock here, we would probably deadlock, since any
+  transaction that read the counter value would prevent all other transactions
+  from updating it.
+\end{frame}
+
+\begin{frame}{Shared and Exclusive Locks}
+  Just to reiterate: the general rule of thumb is that S-locks might be acquired
+  by reads, and X-locks are always acquired by writes. S-locks are compatible
+  with other S-locks, and X-locks are compatible with nothing.
+\end{frame}
+
+\begin{frame}{Multiple Granularity Locking}
+  Q: If InnoDB locks at the row level, what happens when I type LOCK TABLE foo
+  READ?
+  \newline
+  \pause
+  (a) InnoDB scans the whole table for any write locks
+  \newline
+  \pause
+  (b) InnoDB invalidates transactions that hold write locks
+  \newline
+  \pause
+  (c) InnoDB blocks until all write locks have been released
+  \newline
+  \pause
+\end{frame}
+
+\begin{frame}{Multiple Granularity Locking}
+  A: Correct answer: (c). In order to allow for good performance for both table
+  locking behavior as well as row locking table, InnoDB supports multiple
+  granularities of locks: at the table, and row level.
+\end{frame}
+
+\begin{frame}{Intent Locks}
+  To support multiple granularity locking, tables have special ``intent'' locks,
+  IS-locks (``intent to acquire S-lock'') and IX-locks (``intent to acquire
+  X-lock'').
+  \newline
+  \newline
+  Intent locks are always compatible with other intent locks (e.g. IX-lock is
+  compatible with IS-lock). The point of intent locks is to allow efficient
+  table level locking even though we use row level locks.
+\end{frame}
+
+\begin{frame}{Intent Locks}
+  Here is a handy matrix showing lock compatibility ($\times$~means
+  incompatible):
+  \begin{table}[ht]
+    \begin{tabular}{r|c c c c}
+        & IS       & S        & IX       & X        \\ \hline
+     IS & $\cdot$  & $\cdot$  & $\cdot$  & $\times$ \\
+     S  & $\cdot$  & $\cdot$  & $\times$ & $\times$ \\
+     IX & $\cdot$  & $\times$ & $\cdot$  & $\times$ \\
+     X  & $\times$ & $\times$ & $\times$ & $\times$ \\
+    \end{tabular}
+  \end{table}
 \end{frame}
 
 \subsection{Auto-Increment Locks}
 
 \begin{frame}{Auto-Increment Locks}
-  Auto-increment locks are special and different from all other locks. They're
-  also the simplest, so we'll cover them first.
+  Auto-increment locks are special and different from all other locks. We need
+  them mainly because statement based replication requires deterministic
+  autoincrement values.
 \end{frame}
 
 \begin{frame}[fragile]
@@ -666,12 +810,6 @@ id INTEGER PRIMARY KEY AUTO_INCREMENT
 \end{frame}
 
 \begin{frame}{Auto-Increment Locks}
-  Upon executing an \texttt{INSERT} into a table with an auto-increment lock,
-  the auto-increment lock is acquired after table locks and before index
-  locks.
-\end{frame}
-
-\begin{frame}{Auto-Increment Locks}
   Note that the auto-increment value is increased even if a statement that
   increases it isn't committed, so you can have ``gaps'' in a table even if
   there were no deletions.
@@ -688,170 +826,100 @@ id INTEGER PRIMARY KEY AUTO_INCREMENT
   to!
 \end{frame}
 
-\subsection{Lock Types}
+\subsection{Gap Locks}
+\begin{frame}[fragile]
+  \frametitle{The Phantom Row Problem}
+  Before I go into how gap locks work, consider the following example:
+  \begin{verbatim}
+CREATE TABLE `slots`( 
+    `slotnum` int(11) NOT NULL 
+);
 
-\begin{frame}{Lock Types}
-  Before diving into table and index locks, we have to discuss lock types. In
-  general there are two types of locks. There are \emph{shared locks},
-  a.k.a. ``read'' locks or S-locks.
-  \newline
-  \newline
-  There are also \emph{exclusive locks}, a.k.a. ``write'' locks or X-locks.
-  \newline
-  \newline
-  \pause
-  Be advised: we'll be using the notation S-lock and X-lock a lot.
-\end{frame}
-
-\begin{frame}{Lock Types (S-locks)}
-  S-locks are generally used when values are read, and prevent other
-  transactions from modifying the data. Multiple transactions can have S-locks
-  on the same data simultaneously.
-  \newline
-  \newline
-  S-locks are weaker than X-locks, and may sometimes be upgraded to
-  an exclusive lock later on.
-\end{frame}
-
-\begin{frame}{Lock Types (X-locks)}
-  X-locks are stronger than S-locks, and are incompatible with other locks. If
-  transaction $A$ holds an X-lock on some data, no other transaction can hold an
-  S-lock \emph{or} an X-lock on that data at the same time; the other
-  transactions must wait until $A$ releases the lock.
-  \newline
-  \newline
-  If other transactions already hold S-locks or X-locks, then $A$ must wait
-  until those transactions release their lock before it can acquire the X-lock.
-\end{frame}
-
-\begin{frame}{Lock Types}
-  Just to reiterate: the general rule of thumb is that S-locks might be acquired
-  by reads, and X-locks are always acquired by writes. S-locks are compatible
-  with other S-locks, and X-locks are compatible with nothing.
-\end{frame}
-
-\subsection{Table Locks}
-
-\begin{frame}{Table Locks}
-  Tables can be locked in InnoDB. When a table is locked with an S-lock no
-  inserts/updates/alters can occur, but reads can.
-  \newline
-  \newline
-  When a table is locked with an X-lock no other queries can read or write to
-  that table.
-\end{frame}
-
-\begin{frame}{Table Locks}
-  The most common reason for an S-lock or X-lock to be acquired on a table is
-  because of an administrative command such as an \texttt{ALTER TABLE} or
-  \texttt{DROP TABLE}.
-  \newline
-  \newline
-  In ``normal'' usage you won't see these locks.
-\end{frame}
-
-\begin{frame}{Intent Locks}
-  Tables also have special ``intent'' locks, IS-locks (``intent to acquire
-  S-lock'') and IX-locks (``intent to acquire X-lock'').
-  \newline
-  \newline
-  Intent locks are always compatible with other intent locks (e.g. IX-lock is
-  compatible with IS-lock).
-\end{frame}
-
-\begin{frame}{Intent Locks}
-  Here is a handy matrix showing lock compatibility ($\times$~means
-  incompatible):
-  \begin{table}[ht]
-    \begin{tabular}{r|c c c c}
-        & IS       & S        & IX       & X        \\ \hline
-     IS & $\cdot$  & $\cdot$  & $\cdot$  & $\times$ \\
-     S  & $\cdot$  & $\cdot$  & $\times$ & $\times$ \\
-     IX & $\cdot$  & $\times$ & $\cdot$  & $\times$ \\
-     X  & $\times$ & $\times$ & $\times$ & $\times$ \\
-    \end{tabular}
-  \end{table}
-\end{frame}
-
-\begin{frame}{Intent Locks}
-  Any query that's going to acquire an S-lock or X-lock on an index will acquire
-  an intent lock of the same type on the table first.
-  \newline
-  \newline
-  This is so that queries
-  like \texttt{ALTER TABLE} are prevented from running while a \texttt{SELECT}
-  or \texttt{INSERT} is running on a table, even though those queries don't
-  actually lock the table.
-\end{frame}
-
-\subsection{Index Locks}
-
-\begin{frame}{Index Locks}
-  Take a deep breath, we're about to enter the magic and mysterious world of index locks.
-  \newline
-  \newline
-  These are by far the most complex, and arguably most important type of lock in InnoDB.
-\end{frame}
-
-\begin{frame}{Index Locks}
-  Also, remember to forget everything we just said about intent locks. Those are
-  for table locks only, not index locks.
-  \newline
-  \newline
-  Index locks come in just two types: S-locks and X-locks.
-\end{frame}
-
-\begin{frame}{Index Locks}
-  Index locks \emph{are} just of the kind S or X, but that's not the whole
-  story. There are three flavors of index lock:
-  \begin{itemize}
-    \item index record locks
-    \item next-key locks
-    \item gap locks
-  \end{itemize}
-  What all of these locks have in common is that they are held at a per-index
-  level granularity, and they lock all or part of an index.
-\end{frame}
-
-\begin{frame}{Index Record Locks}
-  The most basic index lock is the \emph{index record lock}. Some people may
-  confuse row-level locks with these. In fact, InnoDB cannot truly lock rows, it
-  instead locks these index records.
-  \newline
-  \newline
-  When no indexes/keys are defined for a table, an implicit auto-increment lock
-  is created, and that index is used for locking records. Index record locks on
-  the PK effectively act as a row lock.
+INSERT INTO slots values (90), (102);
+  \end{verbatim}
 \end{frame}
 
 \begin{frame}[fragile]
-  \frametitle{Index Record Locks}
-  Consider the query
-\begin{verbatim}
-DELETE FROM user WHERE id = 1
-\end{verbatim}
-  this query will lock the part of the index for the row whose \texttt{id} is
-  1. The same goes for \texttt{UPDATE} statements, etc.
-  \newline
-  \newline
-  An index record lock is acquired for all indexes associated with the table
-  (with the potential to deadlock, lock wait timeout, etc.). This is one reason
-  not to create too many locks on a table.
+  \frametitle{The Phantom Row Problem}
+  If I want to write code which checks if all slots $>$ 100 is taken, and then
+  inserts into slot 100 if they are, how do I do that?
+  \begin{verbatim}
+SELECT * FROM slots where slotnum > 101 
+FOR UPDATE;
+
+// if this returns 0 rows
+INSERT INTO slots where slotnum = 100;
+// else do something else
+  \end{verbatim}
+\end{frame}
+
+\begin{frame}{The Phantom Row Problem}
+  What if another transaction inserts a row with slotnum $>$ 101 while this is
+  going on? Assuming that we can only lock on rows that exist, this transaction
+  will go through and there will be a row that we didn't know about.
+\end{frame}
+
+\begin{frame}{The Phantom Row Problem}
+  ...a \emph{PHANTOM} row! DUN DUN DUNNNN
+\end{frame}
+
+\begin{frame}{Gap Locks}
+  To solve the phantom row problem, we lock not only the rows that we scan
+  during a locking select, but also the gaps. When we lock a gap, nobody else
+  can insert into that gap.
+\end{frame}
+
+\begin{frame}{Types of Gap Locks}
+  There are a couple types of gap locks:
+  \begin{enumerate}
+  \item Gap Lock: locks a gap
+  \item Next-Key Lock: locks a record and the grap preceding it
+  \item Record-only Lock: locks only a record, and not the gap
+  \item Insert intention lock: locks "part of a gap"
+  \end{enumerate}
+\end{frame}
+
+\begin{frame}{A special note}
+  If you ever want to truly understand gap locking, the following sentence will
+  help you: ``Gap locks in InnoDB are \emph{purely inhibitive}, not
+  authoritative." Let's assume that Heikki knew what he was doing and move on.
+\end{frame}
+
+\begin{frame}{Gap Lock}
+  This one is rather boring. It's just a lock on a gap rather than a record. You
+  might get this if, you say, did a locking select on a gap.
+\end{frame}
+
+\begin{frame}{Next-key Lock}
+  Next-key locking refers to the idea of locking the gap prior to the record
+  that you scan over. This prevents the phantom row problem mentioned earlier.
+  However, it can lead to some counterintuitive behavior.
+\end{frame}
+
+\begin{frame}[fragile]
+  \frametitle{Next-key Locking}
+  For the slots example:
+  \begin{verbatim}
+  (-inf, 90), 90, (90, 102), 102 (102, inf)
+  \end{verbatim}
+  The select we did, \texttt{SELECT * FROM slots where slot\_num > 100} will
+  actually prevent inserts into the gap (90, 102)!
+\end{frame}
+
+\begin{frame}{Record only Lock}
+  This type of gap lock is a special exception for unique indexes. If we have a
+  unique index, and we search for a specific value, we do not need to lock any
+  sort of gap.
+\end{frame}
+
+\begin{frame}{Insert Intention Lock}
+  INSERT statements set a special kind of gap lock called an insert intention
+  lock. These locks lock gaps in a special way such that as long as two inserts
+  are not trying to insert into the same position within the gap, they will not
+  block. 
 \end{frame}
 
 \section{Examples}
-
-\begin{frame}[fragile]
-  \frametitle{Next-Key Locking}
-\begin{verbatim}
-CREATE TABLE dchen (i INT PRIMARY KEY);
-INSERT INTO dchen (i) VALUES (10), (20), (30);
-BEGIN;
-SELECT * FROM dchen WHERE i > 15;
-\end{verbatim}
-  How many locks does the transaction hold, and what are they?
-\end{frame}
-
 \begin{frame}[fragile]
   \frametitle{Copy Row Example}
   The goal is to write a function \texttt{copy\_row(id\_src, id\_dst)} that

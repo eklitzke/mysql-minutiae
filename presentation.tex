@@ -449,6 +449,22 @@ SHOW GLOBAL STATUS LIKE 'Handler_%'
   \end{tabular}
 \end{frame}
 
+\begin{frame}{HandlerSocket Benchmark}
+  And here's one more benchmark, that I did on my home laptop with a
+  consumer-grade Intel SSD, btrfs, and
+  \texttt{innodb\_flush\_log\_at\_trx\_commit = 1}, i.e. do a full
+  \texttt{fsync()} after each write. As before, 20-byte keys and 500-byte
+  values.
+
+  \begin{table}[ht]
+  \begin{tabular}{l l r}
+           & HS & MC \\ \hline
+    writes & 494.70        & 12.57     \\
+    reads  & 22.84         & 8.52      \\
+  \end{tabular}
+  \end{table}
+\end{frame}
+
 \section{InnoDB Internals}
 
 \begin{frame}{InnoDB Background}

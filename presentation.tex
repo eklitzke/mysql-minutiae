@@ -365,12 +365,6 @@ Takeaway: Transactions actually begin when you issue your first query
   \texttt{ha\_innodb}, \texttt{ha\_ndbcluster}, etc.
 \end{frame}
 
-\begin{frame}{Handler API}
-  According to cryptic MySQL slides on the internet, you only need to implement
-  ``about 10'' functions to implement the simplest level of compliance, ``and
-  half of them are one-liners''.
-\end{frame}
-
 \begin{frame}[fragile]
   \frametitle{Handler Variables}
   For a good time, run the following MySQL query:
@@ -388,12 +382,14 @@ SHOW GLOBAL STATUS LIKE 'Handler_%'
 \end{frame}
 
 \begin{frame}{HandlerSocket}
-  HandlerSocket creates a new thread inside of MySQL, which creates a TCP socket
-  bound to some port.
+  HandlerSocket creates a new thread inside of MySQL, which creates TCP sockets
+  bound to read/write ports.
   \newline
   \newline
   You connect to the socket and interact with the HandlerSocket plugin using a
-  compact binary network protocol.
+  custom, compact network protocol. Requests can be pipelined, so if you wanted
+  to do $N$ different lookups you could submit them all at once and have HS do
+  them in parallel for you.
 \end{frame}
 
 \begin{frame}{HandlerSocket}
@@ -464,13 +460,13 @@ SHOW GLOBAL STATUS LIKE 'Handler_%'
   500-byte values.
 
   \begin{table}[ht]
-  \begin{tabular}{l r r r}
-           & MC    & HS     & SQL \\ \hline
-    writes & 12.57 & 494.70 & 496.82 \\
-    reads  & 8.52  & 22.84  & 1864.16\\
+  \begin{tabular}{l r r r l}
+           & MC    & HS     & SQL     & \\ \hline
+    writes & 12.57 & 494.70 & 496.82  & \\
+    reads  & 8.52  & 22.84  & 1864.16 & (!)\\
   \end{tabular}
   \end{table}
-  (note: these numbers are very suspicious, so don't draw any conclusions)
+  (N.B. these numbers are very suspicious, so don't draw any conclusions)
 \end{frame}
 
 \begin{frame}{HandlerSocket Conclusions}

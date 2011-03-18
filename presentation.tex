@@ -421,17 +421,34 @@ SHOW GLOBAL STATUS LIKE 'Handler_%'
       MySQL via HandlerSocket & 750,000 & 45   & 53   \\
     \end{tabular}
   \end{table}
-  Eskil notes that in his tests, memcached was faster than HandlerSocket.
 \end{frame}
 
 \begin{frame}{HandlerSocket Benchmark}
-  Eskil's benchmark:
-  \begin{tabular}{l r@{.}l}
-    \multicolumn{2}{c}{1k Inserts} \\ \hline
-    memcached     & 0 & 25s \\
-    HandlerSocket & 1 & 25s \\
+  My benchmark. This is with a large InnoDB buffer pool (large enough to
+  accomodate all data), and with \texttt{fsync()} disabled after commits. All
+  tests are for 100,000 reads/writes and I took 20 samples. The key was always
+  an integer, as was the value.
+
+  \begin{tabular}{l r r r r r}
+                      & min   & Q1    & Q2    & Q3    & max   \\ \hline
+    HS writes         & 16.06 & 17.78 & 18.43 & 19.43 & 20.30 \\
+    HS reads          & 13.08 & 13.22 & 13.31 & 13.37 & 13.49 \\
+    MC writes         &  9.95 & 10.72 & 10.99 & 11.08 & 11.23 \\
+    MC reads          & 10.29 & 10.58 & 10.80 & 11.09 & 11.46 \\
   \end{tabular}
 \end{frame}
+
+\begin{frame}{HandlerSocket Benchmark}
+  Same, but with 20-byte keys and 500-byte values.
+  \begin{tabular}{l r r r r r}
+                      & min   & Q1     & Q2     & Q3     & max    \\ \hline
+    HS writes         & 84.04 & 109.90 & 110.80 & 116.00 & 124.30 \\
+    HS reads          & 14.45 & 14.63  & 14.69  & 14.92  & 15.48  \\
+    MC writes         & 12.59 & 12.84  & 13.00  & 13.14  & 13.19  \\
+    MC reads          & 11.23 & 12.00  & 12.11  & 12.44  & 12.90  \\
+  \end{tabular}
+\end{frame}
+
 \section{InnoDB Internals}
 
 \begin{frame}{InnoDB Background}

@@ -7,6 +7,9 @@
 \institute{Yelp, Inc.}
 \date{March 18, 2011}
 
+\newcommand{\myitem}{\item[\textbullet]}
+\setbeamercolor{itemize item}{fg=black}
+
 \begin{document}
 
 \begin{frame}
@@ -54,10 +57,10 @@
 \begin{frame}{Databases}
   Things a relational database does:
   \begin{itemize}
-    \item stores data
-    \item provides convenient query facilities (i.e. SQL)
-    \item hopefully: provides transaction support (and transaction isolation)
-    \item maybe: replication facilities
+    \myitem stores data
+    \myitem provides convenient query facilities (i.e. SQL)
+    \myitem hopefully: provides transaction support (and transaction isolation)
+    \myitem maybe: replication facilities
   \end{itemize}
   MySQL with the InnoDB storage engine does all of these.
 \end{frame}
@@ -105,7 +108,7 @@ T3: SELECT * FROM t // (c)
 \newline
 (b) Returns no rows
 \newline
-(c) Returns one row, [1]
+(c) Returns one row
 \newline
 Takeaway: Transactions actually begin when you issue your first query
 \end{frame}
@@ -207,13 +210,13 @@ Takeaway: Transactions actually begin when you issue your first query
 \begin{frame}{MySQL Storage Engines}
   To better elucidate the diferences, MySQL itself does the following:
   \begin{itemize}
-    \item parses incoming SQL statements, and does some of the query optimization
-    \item handles replication
+    \myitem parses incoming SQL statements, and does some of the query optimization
+    \myitem handles replication
   \end{itemize}
   The storage engine
   \begin{itemize}
-    \item implements on-disk storage, and caching
-    \item implements transactions and transaction isolation
+    \myitem implements on-disk storage, and caching
+    \myitem implements transactions and transaction isolation
   \end{itemize}
 \end{frame}
 
@@ -221,9 +224,9 @@ Takeaway: Transactions actually begin when you issue your first query
   At Yelp, we
   almost exclusively use the InnoDB storage engine. Compared to MyISAM, InnoDB provides:
   \begin{itemize}
-    \item ``row-level'' locking, instead of table-level locking
-    \item replication safety
-    \item better crash recovery
+    \myitem ``row-level'' locking, instead of table-level locking
+    \myitem replication safety
+    \myitem better crash recovery
   \end{itemize}
   In general InnoDB is more actively maintained than MyISAM, and is usually
   comparable or superior in speed.
@@ -242,7 +245,7 @@ Takeaway: Transactions actually begin when you issue your first query
 \end{frame}
 
 \begin{frame}{MySQL Replication}
-  Typically that queries that modify data---statements like \texttt{INSERT},
+  Typically queries that modify data---statements like \texttt{INSERT},
   \texttt{UPDATE}, \texttt{DELETE}---should only be run on the master
   database. Running these statements on a slave will cause it to get out of sync
   with the master, which is \emph{usually} unintentional.
@@ -289,8 +292,8 @@ Takeaway: Transactions actually begin when you issue your first query
 \begin{frame}{MySQL Replication Mechanics}
   Each slave uses two threads for replication
   \begin{itemize}
-  \item \texttt{IO\_THREAD}: Connects to master, writes sql statements to the relay logs
-  \item \texttt{SQL\_THREAD}: Reads the relay logs, executes statements in them
+  \myitem \texttt{IO\_THREAD}: Connects to master, writes sql statements to the relay logs
+  \myitem \texttt{SQL\_THREAD}: Reads the relay logs, executes statements in them
   \end{itemize}
 \end{frame}
 
@@ -324,19 +327,19 @@ mysql> show slave status
 \begin{frame}{IO\_THREAD}
   \texttt{SHOW SLAVE STATUS IO\_THREAD} Fields:
   \begin{itemize}
-  \item \texttt{Master\_Log\_File}: binlog file on the master being read from
-  \item \texttt{Read\_Master\_Log\_Pos}: offset into binlog file on master being read from
+  \myitem \texttt{Master\_Log\_File}: binlog file on the master being read from
+  \myitem \texttt{Read\_Master\_Log\_Pos}: offset into binlog file on master being read from
   \end{itemize}
 \end{frame}
 
 \begin{frame}{SQL\_THREAD}
   \texttt{SHOW SLAVE STATUS SQL\_THREAD} Fields:
   \begin{itemize}
-  \item \texttt{Relay\_Log\_File}: relay logfile on the slave where statements are being executed
-  \item \texttt{Relay\_Log\_Pos}: offset into relay logfile on slave
-  \item \texttt{Relay\_Master\_Log\_File}: logfile on master that current relay position corresponds to
-  \item \texttt{Exec\_Master\_Log\_File}: position of logfile on master that current position corresponds to
-  \item \texttt{Seconds\_Behind\_Master}: difference in time between the
+  \myitem \texttt{Relay\_Log\_File}: relay logfile on the slave where statements are being executed
+  \myitem \texttt{Relay\_Log\_Pos}: offset into relay logfile on slave
+  \myitem \texttt{Relay\_Master\_Log\_File}: logfile on master that current relay position corresponds to
+  \myitem \texttt{Exec\_Master\_Log\_File}: position of logfile on master that current position corresponds to
+  \myitem \texttt{Seconds\_Behind\_Master}: difference in time between the
       SQL\_THREAD and the IO\_THREAD
   \end{itemize}
 \end{frame}
@@ -678,9 +681,9 @@ SHOW GLOBAL STATUS LIKE 'Handler_%'
 \begin{frame}{InnoDB Locking}
   Types of locks:
   \begin{itemize}
-    \item Shared and Exclusive Locks
-    \item Auto-increment locks
-    \item Gap Locks
+    \myitem Shared and Exclusive Locks
+    \myitem Auto-increment locks
+    \myitem Gap Locks
   \end{itemize}
 \end{frame}
 
@@ -719,18 +722,18 @@ SHOW GLOBAL STATUS LIKE 'Handler_%'
   \begingroup
     \fontsize {10pt}{12pt}\selectfont
     \begin{verbatim}
-SELECT * FROM container WHERE type = 'cookiebox' 
+SELECT * FROM container WHERE type = 'cookiebox'
 LOCK IN SHARE MODE;
 
-// Check to see if we got a 'cookiebox' back, and 
+// Check to see if we got a 'cookiebox' back, and
 // make sure it's not full.
-// Let's assume we got back  an empty container 
+// Let's assume we got back  an empty container
 // with id 5
 
-INSERT INTO contents (container_id, contents) 
+INSERT INTO contents (container_id, contents)
 VALUES (5, 'cookies');
     \end{verbatim}
-  \endgroup 
+  \endgroup
 \end{frame}
 
 \begin{frame}{Example: Referential Integrity}
@@ -884,8 +887,8 @@ id INTEGER PRIMARY KEY AUTO_INCREMENT
   \frametitle{The Phantom Row Problem}
   Before I go into how gap locks work, consider the following example:
   \begin{verbatim}
-CREATE TABLE `slots`( 
-    `slotnum` int(11) NOT NULL 
+CREATE TABLE `slots`(
+    `slotnum` int(11) NOT NULL
 );
 
 INSERT INTO slots values (90), (102);
@@ -894,10 +897,10 @@ INSERT INTO slots values (90), (102);
 
 \begin{frame}[fragile]
   \frametitle{The Phantom Row Problem}
-  If I want to write code which checks if all slots $>$ 100 is taken, and then
+  If I want to write code which checks if all slots $>100$ are taken, and then
   inserts into slot 100 if they are, how do I do that?
   \begin{verbatim}
-SELECT * FROM slots where slotnum > 101 
+SELECT * FROM slots where slotnum > 101
 FOR UPDATE;
 
 // if this returns 0 rows
@@ -907,8 +910,11 @@ INSERT INTO slots where slotnum = 100;
 \end{frame}
 
 \begin{frame}{The Phantom Row Problem}
-  What if another transaction inserts a row with slotnum $>$ 101 while this is
-  going on? Assuming that we can only lock on rows that exist, this transaction
+  What if another transaction inserts a row with slotnum~$>101$ while this is
+  going on?
+  \newline
+  \newline
+  Assuming that we can only lock on rows that exist, this transaction
   will go through and there will be a row that we didn't know about.
 \end{frame}
 
@@ -923,19 +929,19 @@ INSERT INTO slots where slotnum = 100;
 \end{frame}
 
 \begin{frame}{Types of Gap Locks}
-  There are a couple types of gap locks:
+  There are a couple of types of gap locks:
   \begin{enumerate}
-  \item Gap Lock: locks a gap
-  \item Next-Key Lock: locks a record and the grap preceding it
-  \item Record-only Lock: locks only a record, and not the gap
-  \item Insert intention lock: locks "part of a gap"
+    \myitem Gap Lock: locks a gap
+    \myitem Next-Key Lock: locks a record and the grap preceding it
+    \myitem Record-only Lock: locks only a record, and not the gap
+    \myitem Insert intention lock: locks ``part of a gap''
   \end{enumerate}
 \end{frame}
 
 \begin{frame}{A special note}
   If you ever want to truly understand gap locking, the following sentence will
   help you: ``Gap locks in InnoDB are \emph{purely inhibitive}, not
-  authoritative." Let's assume that Heikki knew what he was doing and move on.
+  authoritative.'' Let's assume that Heikki knew what he was doing and move on.
 \end{frame}
 
 \begin{frame}{Gap Lock}
@@ -969,7 +975,7 @@ INSERT INTO slots where slotnum = 100;
   INSERT statements set a special kind of gap lock called an insert intention
   lock. These locks lock gaps in a special way such that as long as two inserts
   are not trying to insert into the same position within the gap, they will not
-  block. 
+  block.
 \end{frame}
 
 \section{Examples}

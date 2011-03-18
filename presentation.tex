@@ -410,6 +410,14 @@ SHOW GLOBAL STATUS LIKE 'Handler_%'
   without all of the overhead and complexity of the rest of MySQL.
 \end{frame}
 
+\begin{frame}{HandlerSocket Performance}
+  Akira Higuchi (the HandlerSocket author) has generally found about
+  $4\times$~improvement for PK-read queries.
+  \newline
+  \newline
+  Likewise, generally about $3\times$~improvement for inserts.
+\end{frame}
+
 \begin{frame}{HandlerSocket Benchmark}
   These are the results of Yoshinori Matsunobu's benchmarks, using the InnoDB
   plugin version 1.0 (i.e. \texttt{ha\_innodb\_plugin.so} for MySQL 5.1):
@@ -450,19 +458,29 @@ SHOW GLOBAL STATUS LIKE 'Handler_%'
 \end{frame}
 
 \begin{frame}{HandlerSocket Benchmark}
-  And here's one more benchmark, that I did on my home laptop with a
-  consumer-grade Intel SSD, btrfs, and
-  \texttt{innodb\_flush\_log\_at\_trx\_commit = 1}, i.e. do a full
-  \texttt{fsync()} after each write. As before, 20-byte keys and 500-byte
-  values.
+  And here's one more benchmark, that I did on my home laptop with MySQL 5.1.55,
+  a consumer-grade Intel SSD, btrfs, and
+  \texttt{innodb\_flush\_log\_at\_trx\_commit = 1}. As before, 20-byte keys and
+  500-byte values.
 
   \begin{table}[ht]
-  \begin{tabular}{l r r}
-           & MC    & HS     \\ \hline
-    writes & 12.57 & 494.70 \\
-    reads  & 8.52  & 22.84  \\
+  \begin{tabular}{l r r r}
+           & MC    & HS     & SQL \\ \hline
+    writes & 12.57 & 494.70 & 496.82 \\
+    reads  & 8.52  & 22.84  & 1864.16\\
   \end{tabular}
   \end{table}
+  (note: these numbers are very suspicious, so don't draw any conclusions)
+\end{frame}
+
+\begin{frame}{HandlerSocket Conclusions}
+  The performance that I (Evan) measured doesn't quite match what others have
+  reported, so more investigation here is warranted, probably using real DB
+  hardware.
+  \newline
+  \newline
+  In general, it looks like HandlerSocket read performance is nearly as good as
+  memcached, and could make a good replacement for row-level caches (e.g. \texttt{user\_session} data).
 \end{frame}
 
 \section{InnoDB Internals}

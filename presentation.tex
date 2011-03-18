@@ -286,13 +286,70 @@ Takeaway: Transactions actually begin when you issue your first query
   prevent certain types of data corruption.
 \end{frame}
 
-\begin{frame}{MySQL Binlogs}
+\begin{frame}{MySQL Replication Mechanics}
+  Each slave uses two threads for replication
+  \begin{itemize}
+  \item \texttt{IO\_THREAD}: Connects to master, writes sql statements to the relay logs
+  \item \texttt{SQL\_THREAD}: Reads the relay logs, executes statements in them
+  \end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+  \frametitle{SHOW SLAVE STATUS}
+  \begingroup
+    \fontsize{10pt}{10pt}\selectfont
+    \begin{verbatim}
+mysql> show slave status
+*************************** 1. row ***************************
+             Slave_IO_State: Waiting for master to send event
+                Master_Host: 10.18.3.17
+                Master_User: repl
+                Master_Port: 3306
+              Connect_Retry: 60
+            Master_Log_File: mysql-bin.000338
+        Read_Master_Log_Pos: 190089940
+             Relay_Log_File: readdb8-relay-bin.001000
+              Relay_Log_Pos: 190090077
+      Relay_Master_Log_File: mysql-bin.000338
+           Slave_IO_Running: Yes
+          Slave_SQL_Running: Yes
+        Exec_Master_Log_Pos: 190089940
+            Relay_Log_Space: 190090077
+      Seconds_Behind_Master: 0
+1 row in set (0.00 sec)
+    \end{verbatim}
+\endgroup
+\end{frame}
+
+\begin{frame}{IO\_THREAD}
+  \texttt{SHOW SLAVE STATUS IO\_THREAD} Fields:
+  \begin{itemize}
+  \item \texttt{Master\_Log\_File}: binlog file on the master being read from
+  \item \texttt{Read\_Master\_Log\_Pos}: offset into binlog file on master being read from
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{SQL\_THREAD}
+  \texttt{SHOW SLAVE STATUS SQL\_THREAD} Fields:
+  \begin{itemize}
+  \item \texttt{Relay\_Log\_File}: relay logfile on the slave where statements are being executed
+  \item \texttt{Relay\_Log\_Pos}: offset into relay logfile on slave
+  \item \texttt{Relay\_Master\_Log\_File}: logfile on master that current relay position corresponds to
+  \item \texttt{Exec\_Master\_Log\_File}: position of logfile on master that current position corresponds to
+  \item \texttt{Seconds\_Behind\_Master}: difference in time between the
+      SQL\_THREAD and the IO\_THREAD
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{MySQL Relay and Binlogs}
   MySQL serializes transactions that modify data into a special log called the
   \emph{binlog}, short for ``binary log''.
   \newline
   \newline
-  SQL statements in the binlog are replayed one at a time on the slave
-  databases, causing them to make the same modifications that the master made.
+  SQL statements in the binlog are read into a special log called the
+  \emph{relay log} on the slave by the slave io thread. At the same time,
+  transactions are replayed one at a time on the slave databases by the
+  sql thread, causing them to make the same modifications that the master made.
 \end{frame}
 
 \begin{frame}{Replication Caveats}
